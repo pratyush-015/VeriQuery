@@ -3,12 +3,29 @@ import mimetypes
 from app.parsing import extract_text_from_pdf, extract_text_from_docx
 from app.embeddings import chunk_text, embed_text_chunks, find_relevant_chunks
 from app.llm import answer_with_llm
+from app.query_parsing import extract_entities
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
 
 # In-memory doc store (replace with database or persistent store for real use)
 doc_chunks = []
 chunk_embeddings = []
 
 app = FastAPI(title="VeriQuery API")
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class QueryRequest(BaseModel):
+    question: str
+
 
 @app.post("/upload")
 async def upload_document(file: UploadFile = File(...)):
@@ -38,11 +55,15 @@ async def upload_document(file: UploadFile = File(...)):
 
 
 @app.post("/query")
-async def query_document(question: str = Query(...)):
+async def query_document(req: QueryRequest):
+    question = req.question
     # Step 1: Embed the question using the same model as chunks
     from sentence_transformers import SentenceTransformer
     model = SentenceTransformer('all-MiniLM-L6-v2')
     query_embedding = model.encode([question])[0]
+
+    entities = extract_entities(question)
+
     
     # Step 2: Retrieve top-3 relevant chunks
     import numpy as np
@@ -54,12 +75,26 @@ async def query_document(question: str = Query(...)):
     
     # Step 3: Call LLM for answer
     result = answer_with_llm(question, context)
+    decision = result.get("decision", "unknown")
+    amount = result.get("amount", None)
+    answer = result.get("answer", "")
+    clause_mapping = result.get("clause_mapping", {})  # dict: component -> idx
+
+    # Build explainable justification
+    justification = []
+    for comp, idx in clause_mapping.items():
+        justification.append({
+            "decision_component": comp,
+            "clause": idx,
+            "text": top_chunks[idx] if idx < len(top_chunks) else ""
+        })
     
     # Step 4: Return as structured JSON
     return {
         "question": question,
-        "answer": result.get("answer"),
-        "score": result.get("score"),
-        "justification": context,
-        "source_clauses": top_chunks
+        "decision": decision,
+        "amount": amount,
+        "answer": answer,
+        "justification": justification,
+        "source_clauses": top_chunks  # All retrieved chunks, for reference
     }

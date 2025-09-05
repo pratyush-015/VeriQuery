@@ -1,7 +1,14 @@
 from sentence_transformers import SentenceTransformer
 import numpy as np
+import chromadb
+from chromadb.config import Settings
 
 model = SentenceTransformer('all-MiniLM-L6-v2')
+
+chroma_client = chromadb.Client(Settings(
+    persist_directory="./chroma_db"
+))
+collection = chroma_client.get_or_create_collection("veriquey_docs")
 
 def find_relevant_chunks(query_embedding, chunk_embeddings, chunks, top_k=3):
     """Returns the top_k most relevant chunks based on cosine similarity."""
@@ -21,3 +28,18 @@ def embed_text_chunks(chunks: list[str]):
     # Returns a numpy array of embeddings
     embeddings = model.encode(chunks)
     return embeddings
+
+def add_embeddings_to_db(chunk_texts, chunk_embeddings, metadata):
+    for i, text in enumerate(chunk_texts):
+        collection.add(
+            embeddings=[chunk_embeddings[i]],
+            documents=[text],
+            metadatas=[metadata[i]]
+        )
+
+def search_similar_chunks(query_embedding, k=5):
+    results = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=k
+    )
+    return results["documents"][0], results["metadatas"][0]

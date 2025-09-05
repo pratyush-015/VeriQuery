@@ -14,3 +14,11 @@ def extract_text_from_docx(file_bytes: bytes) -> str:
     document = docx.Document("temp.docx")
     text = "\n".join([para.text for para in document.paragraphs])
     return text
+
+def check_missing_entities(entities: dict, required_fields: list) -> list:
+    """
+    Returns list of fields missing from extracted entities.
+    """
+    missing = [field for field in required_fields if field not in entities or not entities[field]]
+    return missing
+
