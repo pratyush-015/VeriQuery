@@ -4,7 +4,12 @@ A system that uses Large Language Models (LLMs) to process natural language quer
 
 
 To Run Backend:
+Click Activate1.ps from venv scripts to start venv
+Then:
 python -m uvicorn app.main:app --reload
 
 Go to:
 http://127.0.0.1:8000/docs
+
+To Run frontend:
+npm start
